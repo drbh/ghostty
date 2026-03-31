@@ -448,7 +448,15 @@ pub fn print(self: *Terminal, c: u21) !void {
                                 } else {
                                     const cps = old_pin.node.data.lookupGrapheme(old_rac.cell).?;
                                     for (cps) |cp| {
-                                        try self.screens.active.appendGrapheme(new_rac.cell, cp);
+                                        // appendGrapheme may trigger increaseCapacity which
+                                        // destroys and replaces the cursor's page. We must
+                                        // reload the cell pointer from the cursor each time
+                                        // because new_rac.cell becomes dangling after page
+                                        // reallocation.
+                                        try self.screens.active.appendGrapheme(
+                                            self.screens.active.cursor.page_cell,
+                                            cp,
+                                        );
                                     }
                                     old_pin.node.data.clearGrapheme(old_rac.cell);
                                 }
@@ -456,9 +464,11 @@ pub fn print(self: *Terminal, c: u21) !void {
                                 old_pin.node.data.updateRowGraphemeFlag(old_rac.row);
                             }
 
-                            // Point prev.cell to our new previous cell that
-                            // we'll be appending graphemes to
-                            prev.cell = new_rac.cell;
+                            // Point prev.cell to our new previous cell.
+                            // Use cursor.page_cell instead of new_rac.cell because
+                            // appendGrapheme above may have triggered page reallocation,
+                            // making new_rac.cell a dangling pointer.
+                            prev.cell = self.screens.active.cursor.page_cell;
                         } else {
                             self.printCell(
                                 0,
